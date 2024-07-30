@@ -1,5 +1,5 @@
 {
-  "name": "munafio/chatify",
+  "name": "matiaso/chatify",
   "description": "A package for Laravel PHP Framework to add a complete real-time chat system.",
   "type": "library",
   "keywords": [
@@ -18,6 +18,10 @@
     {
       "name": "Munaf A. Mahdi",
       "email": "munafaqeelmahdi@gmail.com"
+    },
+    {
+      "name": "Matias O.",
+      "email": ""
     }
   ],
   "homepage": "https://github.com/munafio/chatify",
