@@ -60,11 +60,14 @@ class MessagesController extends Controller
     public function idFetchData(Request $request)
     {
         $favorite = Chatify::inFavorite($request['id']);
-        $fetch = User::where('id', $request['id'])->select('id', 'name', 'email')->first();
+        $fetch = User::where('id', $request['id'])->select('id', 'name', 'email', 'type')->first();
         if($fetch){
             $userAvatar = Chatify::getUserWithAvatar($fetch)->avatar;
         }
         unset($fetch['email']);
+        if ($fetch['type'] === User::USER_TYPE_APPLICANT) {
+            $fetch['name'] = 'Applicant ' . $fetch['id'];
+        }
         return Response::json([
             'favorite' => $favorite,
             'fetch' => $fetch ?? null,
@@ -231,12 +234,17 @@ class MessagesController extends Controller
             ->orWhere('ch_messages.to_id', Auth::user()->id);
         })
         ->where('users.id','!=',Auth::user()->id)
-        ->select('users.*',DB::raw('MAX(ch_messages.created_at) max_created_at'))
+        ->select('users.name', 'users.id', 'users.type',DB::raw('MAX(ch_messages.created_at) max_created_at'))
         ->orderBy('max_created_at', 'desc')
         ->groupBy('users.id')
         ->paginate($request->per_page ?? $this->perPage);
 
-        $usersList = $users->items();
+        $usersList = array_map(function ($user) {
+            if ($user->type === User::USER_TYPE_APPLICANT) {
+                $user->name = sprintf(__('Applicant %s'), $user->id);
+            }
+            return $user;
+        }, $users->items());
 
         if (count($usersList) > 0) {
             $contacts = '';
@@ -263,11 +271,14 @@ class MessagesController extends Controller
     public function updateContactItem(Request $request)
     {
         // Get user data
-        $user = User::where('id', $request['user_id'])->first();
+        $user = User::where('id', $request['user_id'])->select('id', 'name', 'type')->first();
         if(!$user){
             return Response::json([
                 'message' => 'User not found!',
             ], 401);
+        }
+        if($user->type === User::USER_TYPE_APPLICANT) {
+            $user->name = sprintf(__('Applicant %s'), $user->id);
         }
         $contactItem = Chatify::getContactItem($user);
 
@@ -308,7 +319,10 @@ class MessagesController extends Controller
         $favorites = Favorite::where('user_id', Auth::user()->id);
         foreach ($favorites->get() as $favorite) {
             // get user data
-            $user = User::where('id', $favorite->favorite_id)->first();
+            $user = User::where('id', $favorite->favorite_id)->select('id', 'name', 'type')->first();
+            if($user->type === User::USER_TYPE_APPLICANT) {
+                $user->name = sprintf(__('Applicant %s'), $user->id);
+            }
             $favoritesList .= view('Chatify::layouts.favorite', [
                 'user' => $user,
             ]);
@@ -319,36 +333,6 @@ class MessagesController extends Controller
             'favorites' => $favorites->count() > 0
                 ? $favoritesList
                 : 0,
-        ], 200);
-    }
-
-    /**
-     * Search in messenger
-     *
-     * @param Request $request
-     * @return JsonResponse|void
-     */
-    public function search(Request $request)
-    {
-        $getRecords = null;
-        $input = trim(filter_var($request['input']));
-        $records = User::where('id','!=',Auth::user()->id)
-                    ->where('name', 'LIKE', "%{$input}%")
-                    ->paginate($request->per_page ?? $this->perPage);
-        foreach ($records->items() as $record) {
-            $getRecords .= view('Chatify::layouts.listItem', [
-                'get' => 'search_item',
-                'user' => Chatify::getUserWithAvatar($record),
-            ])->render();
-        }
-        if($records->total() < 1){
-            $getRecords = '<p class="message-hint center-el"><span>Nothing to show.</span></p>';
-        }
-        // send the response
-        return Response::json([
-            'records' => $getRecords,
-            'total' => $records->total(),
-            'last_page' => $records->lastPage()
         ], 200);
     }
 
